@@ -1,0 +1,8 @@
+/dist/
+/node_modules/
+/vendor/
+*.zip
+*.zip.sig
+*.privkey.b64
+*.keypair.json
+.DS_Store

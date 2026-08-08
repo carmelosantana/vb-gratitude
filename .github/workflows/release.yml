@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sodium, zip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Resolve version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build ESM bundle
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build deterministic archive
+        run: bash scripts/build-zip.sh "${{ steps.version.outputs.version }}"
+
+      - name: Sign artifact
+        id: sign
+        env:
+          PLUGIN_SIGNING_KEY: ${{ secrets.PLUGIN_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP="dist/vb-gratitude-${VERSION}.zip"
+
+          KEYFILE="$(mktemp)"
+          trap 'rm -f "$KEYFILE"' EXIT
+          printf '%s' "$PLUGIN_SIGNING_KEY" > "$KEYFILE"
+
+          # sign.php writes "$ZIP.sig" and prints the sha256 hex digest to stdout.
+          DIGEST="$(php tools/sign.php "$ZIP" "$KEYFILE")"
+
+          rm -f "$KEYFILE"
+          trap - EXIT
+
+          SIGNATURE="$(cat "${ZIP}.sig")"
+          {
+            echo "digest=${DIGEST}"
+            echo "signature=${SIGNATURE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/vb-gratitude-${{ steps.version.outputs.version }}.zip
+            dist/vb-gratitude-${{ steps.version.outputs.version }}.zip.sig
+
+      - name: Marketplace artifact block
+        run: |
+          {
+            echo '### Marketplace `artifact` block'
+            echo
+            echo 'Copy this verbatim into marketplace-repository/plugins/vb-gratitude/manifest.json.'
+            echo 'These values come from THIS CI build. A locally built ZIP has different bytes,'
+            echo 'so a locally computed digest fails signature verification on every install.'
+            echo
+            echo '```json'
+            echo '"artifact": {'
+            echo '  "url": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/vb-gratitude-${{ steps.version.outputs.version }}.zip",'
+            echo '  "digest": "${{ steps.sign.outputs.digest }}",'
+            echo '  "signature": "${{ steps.sign.outputs.signature }}",'
+            echo '  "keyId": "carmelo-ed25519-2026"'
+            echo '}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

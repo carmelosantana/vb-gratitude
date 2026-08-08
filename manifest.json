@@ -1,0 +1,131 @@
+{
+  "id": "vb-gratitude",
+  "slug": "vb-gratitude",
+  "name": "Gratitude",
+  "version": "0.1.0",
+  "description": "Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger; recognition can optionally post to a team channel.",
+  "author": "Carmelo Santana",
+  "visibility": "marketplace",
+  "status": "draft",
+  "enabledByDefault": false,
+  "engines": {
+    "vctrbase": "^1.0.0"
+  },
+  "provider": "Vctrs\\Plugins\\VbGratitude\\VbGratitudeServiceProvider",
+  "uiMode": "module",
+  "ui": {
+    "entry": "dist/entry.js",
+    "nav": [
+      {
+        "key": "vb-gratitude",
+        "label": "Gratitude",
+        "path": "/dashboard/plugins/vb-gratitude/view"
+      }
+    ],
+    "routes": [
+      {
+        "route": "/dashboard/plugins/vb-gratitude/view",
+        "title": "Gratitude"
+      }
+    ]
+  },
+  "permissions": [
+    "vb-gratitude.shoutouts.create.rooftop",
+    "vb-gratitude.shoutouts.read.rooftop",
+    "vb-gratitude.badges.read.rooftop",
+    "vb-gratitude.admin.manage.rooftop"
+  ],
+  "nav": [
+    {
+      "key": "vb-gratitude",
+      "label": "Gratitude",
+      "href": "/dashboard/plugins/vb-gratitude/view",
+      "icon": "heartHandshake"
+    }
+  ],
+  "widgets": [
+    {
+      "key": "vb-gratitude.givenThisMonth",
+      "title": "Shoutouts you've given this month",
+      "permission": "vb-gratitude.shoutouts.read.rooftop"
+    },
+    {
+      "key": "vb-gratitude.receivedThisMonth",
+      "title": "Shoutouts you've received this month",
+      "permission": "vb-gratitude.shoutouts.read.rooftop"
+    },
+    {
+      "key": "vb-gratitude.recentShoutouts",
+      "title": "Recent team gratitude",
+      "permission": "vb-gratitude.shoutouts.read.rooftop"
+    }
+  ],
+  "settings": {
+    "permission": "vb-gratitude.admin.manage.rooftop",
+    "admin": [
+      {
+        "key": "reminderEnabled",
+        "label": "Send a daily morning prompt",
+        "group": "Reminders",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "reminderTime",
+        "label": "Morning prompt time (HH:MM)",
+        "group": "Reminders",
+        "type": "string",
+        "default": "09:00"
+      },
+      {
+        "key": "pointsPerShoutout",
+        "label": "Points awarded per shoutout given",
+        "group": "Points",
+        "type": "number",
+        "default": 5,
+        "min": 0,
+        "max": 100
+      },
+      {
+        "key": "dailyShoutoutAllowance",
+        "label": "Point-earning shoutouts per giver per day",
+        "group": "Limits",
+        "type": "number",
+        "default": 3,
+        "min": 1,
+        "max": 25
+      },
+      {
+        "key": "channelPostingEnabled",
+        "label": "Also post shoutouts to a team channel",
+        "group": "Sharing",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "channelId",
+        "label": "Channel to post shoutouts to",
+        "group": "Sharing",
+        "type": "string",
+        "default": null
+      }
+    ],
+    "userPreferences": [
+      {
+        "key": "morningReminderOptIn",
+        "label": "Send me the morning gratitude prompt",
+        "group": "Reminders",
+        "type": "boolean",
+        "default": true
+      }
+    ]
+  },
+  "jobs": [
+    {
+      "key": "vb-gratitude/morning-reminder",
+      "schedule": "0 9 * * *",
+      "description": "Send a gentle morning gratitude prompt to opted-in users."
+    }
+  ],
+  "distribution": "extracted"
+}

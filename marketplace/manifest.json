@@ -1,0 +1,23 @@
+{
+  "slug": "vb-gratitude",
+  "name": "Gratitude",
+  "version": "0.1.0",
+  "description": "Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger; recognition can optionally post to a team channel.",
+  "author": "Carmelo Santana",
+  "category": "wellness",
+  "visibility": "marketplace",
+  "engines": {
+    "vctrbase": "^1.0.0"
+  },
+  "links": {
+    "repository": "https://github.com/carmelosantana/vb-gratitude",
+    "homepage": "https://vctrs.io"
+  },
+  "provider": "Vctrs\\Plugins\\VbGratitude\\VbGratitudeServiceProvider",
+  "artifact": {
+    "url": "https://github.com/carmelosantana/vb-gratitude/releases/download/v0.1.0/vb-gratitude-0.1.0.zip",
+    "digest": "REPLACE-WITH-VALUE-PRINTED-BY-RELEASE-CI",
+    "signature": "REPLACE-WITH-VALUE-PRINTED-BY-RELEASE-CI",
+    "keyId": "carmelo-ed25519-2026"
+  }
+}
