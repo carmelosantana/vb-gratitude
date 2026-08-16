@@ -6,3 +6,4 @@
 *.privkey.b64
 *.keypair.json
 .DS_Store
+.superpowers/
