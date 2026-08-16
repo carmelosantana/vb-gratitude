@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Vctrs\Plugins\VbGratitude;
 
 use App\Plugins\PluginSettings;
+use Illuminate\Database\QueryException;
 use Vctrs\Plugins\Gamification\GamificationService;
 use Vctrs\Plugins\StaffHub\StaffDirectory;
+use Vctrs\Plugins\VbGratitude\Models\GratitudeBadgeAward;
 use Vctrs\Plugins\VbGratitude\Models\GratitudeShoutout;
 
 /**
@@ -33,6 +35,31 @@ class GratitudeService
     private const DEFAULT_POINTS_PER_SHOUTOUT = 5;
 
     private const DEFAULT_DAILY_ALLOWANCE = 3;
+
+    /**
+     * Single source of truth for the GIVING-based milestone badges.
+     *
+     * Every badge here is computable purely from THIS tenant's own
+     * vb_gratitude_shoutouts rows by the giver — no cross-plugin seam, no PII.
+     * `kind` decides which of the giver's counts the threshold is measured
+     * against:
+     *   - 'total'                → total shoutouts the giver has recorded;
+     *   - 'distinct_recipients'  → distinct recipient_staff_id the giver has tagged.
+     *
+     * Add a row here to add a badge; nothing else in the evaluator changes.
+     *
+     * NOTE: the received-based `appreciated` badge is intentionally absent. It
+     * needs a user→staff mapping the sanctioned StaffDirectory seam does not
+     * expose; it awaits a core StaffDirectory::staffIdForUser() seam.
+     *
+     * @var array<string, array{kind: 'total'|'distinct_recipients', threshold: int}>
+     */
+    private const GIVING_BADGES = [
+        'first_thanks' => ['kind' => 'total', 'threshold' => 1],
+        'grateful_regular' => ['kind' => 'total', 'threshold' => 10],
+        'team_connector' => ['kind' => 'distinct_recipients', 'threshold' => 5],
+        'gratitude_champion' => ['kind' => 'total', 'threshold' => 50],
+    ];
 
     public function __construct(
         private readonly StaffDirectory $staff,
@@ -113,10 +140,77 @@ class GratitudeService
             $shoutout->save();
         }
 
-        // BADGE-EVALUATION HOOK (later task): evaluate & award gratitude badges
-        // (e.g. first_shoutout, top_helper milestones) here, AFTER the shoutout +
-        // point award have landed. Intentionally NOT implemented in this task.
+        // BADGE-EVALUATION HOOK: the shoutout + any point award have landed, so
+        // evaluate the giver's giving-milestone badges and award any newly earned
+        // one. Kept off the persisted-shoutout return path — a badge insert never
+        // blocks or alters the shoutout the caller just made.
+        $this->evaluateGivingBadges($giverUserId);
 
         return $shoutout;
+    }
+
+    /**
+     * Evaluate the giver's GIVING-milestone badges and award any newly earned.
+     *
+     * Computed entirely from this tenant's own shoutouts (BelongsToTenant scopes
+     * every query), so it needs no cross-plugin seam and touches no PII. At most
+     * one COUNT per `kind` runs (memoized), regardless of how many badges share a
+     * kind, so the core shoutout path stays cheap.
+     *
+     * Received-based badges (e.g. `appreciated`) are deliberately NOT evaluated
+     * here — they await a core StaffDirectory::staffIdForUser() seam.
+     */
+    private function evaluateGivingBadges(string $giverUserId): void
+    {
+        $totalGiven = null;
+        $distinctRecipients = null;
+
+        foreach (self::GIVING_BADGES as $badgeKey => $def) {
+            $count = match ($def['kind']) {
+                'total' => $totalGiven ??= GratitudeShoutout::query()
+                    ->where('giver_user_id', $giverUserId)
+                    ->count(),
+                'distinct_recipients' => $distinctRecipients ??= GratitudeShoutout::query()
+                    ->where('giver_user_id', $giverUserId)
+                    ->distinct()
+                    ->count('recipient_staff_id'),
+            };
+
+            if ($count >= $def['threshold']) {
+                $this->awardBadge($giverUserId, $badgeKey);
+            }
+        }
+    }
+
+    /**
+     * Award $badgeKey to $userId once, idempotently.
+     *
+     * Each user earns each badge at most once (unique per user+badge in this
+     * tenant). The exists() check skips the common re-crossing case; the
+     * try/catch swallows the losing side of a concurrent double-award, which the
+     * table's unique index rejects — so a duplicate is ignored, never a crash.
+     * BelongsToTenant stamps tenant_type/tenant_id on the new row.
+     */
+    private function awardBadge(string $userId, string $badgeKey): void
+    {
+        $alreadyEarned = GratitudeBadgeAward::query()
+            ->where('user_id', $userId)
+            ->where('badge_key', $badgeKey)
+            ->exists();
+
+        if ($alreadyEarned) {
+            return;
+        }
+
+        try {
+            $award = new GratitudeBadgeAward;
+            $award->user_id = $userId;
+            $award->badge_key = $badgeKey;
+            $award->earned_at = now();
+            $award->save();
+        } catch (QueryException) {
+            // A racing insert already awarded this badge (unique index violation).
+            // Idempotent by design: the badge exists, so swallow the duplicate.
+        }
     }
 }
