@@ -152,6 +152,15 @@ it('returns the tenant feed newest-first with recipient names enriched', functio
         ->assertJsonPath('data.shoutouts.1.recipient_name', 'Alex Helper');
 });
 
+it('blocks the shoutout feed without read permission (403)', function () {
+    // Create grant reaches the route but the index is read-gated.
+    $user = bootGratitudeAs(['+vb-gratitude.shoutouts.create.rooftop']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/vb-gratitude/shoutouts')
+        ->assertStatus(403);
+});
+
 it('returns the badges envelope (empty is acceptable)', function () {
     $user = bootGratitudeAs(['+vb-gratitude.badges.read.rooftop']);
 
@@ -181,6 +190,15 @@ it('lists the acting user\'s earned badges newest-first', function () {
         ->assertOk()
         ->assertJsonPath('data.badges.0.badge_key', 'top_helper')
         ->assertJsonPath('data.badges.1.badge_key', 'first_shoutout');
+});
+
+it('blocks the badges list without badges-read permission (403)', function () {
+    // Shoutout-read grant reaches the route but badges is badges-read-gated.
+    $user = bootGratitudeAs(['+vb-gratitude.shoutouts.read.rooftop']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/vb-gratitude/badges')
+        ->assertStatus(403);
 });
 
 it('lists assignable teammates for the picker via StaffDirectory', function () {

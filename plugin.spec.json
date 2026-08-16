@@ -105,13 +105,6 @@
         "default": true
       },
       {
-        "key": "reminderTime",
-        "label": "Morning prompt time (HH:MM)",
-        "group": "Reminders",
-        "type": "string",
-        "default": "09:00"
-      },
-      {
         "key": "pointsPerShoutout",
         "label": "Points awarded per shoutout given",
         "group": "Points",

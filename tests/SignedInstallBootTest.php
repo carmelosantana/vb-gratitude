@@ -13,8 +13,8 @@ declare(strict_types=1);
  *
  * This exercises this plugin's real domain: shoutouts (table
  * vb_gratitude_shoutouts) and badge awards (table vb_gratitude_badge_awards);
- * the givenThisMonth metric widget. If your own spec adds a real endpoint to
- * src/routes.php, uncomment and adapt the HTTP assertion below.
+ * the givenThisMonth metric widget. The plugin's real HTTP endpoints
+ * (src/routes.php) are exercised end to end by HttpEndpointsTest.
  */
 
 use App\Models\Membership;
@@ -68,11 +68,7 @@ it('installs the signed vb-gratitude, boots it, and creates its schema', functio
         ->assertOk()
         ->assertJsonPath('data.payload.value', 0);
 
-    // TODO: once src/routes.php declares a real endpoint (see its commented
-    // example), prove it resolves (200 + {status:success}) instead of the 404
-    // the vb-native spike caught:
-    // $this->actingAs($user)
-    //     ->getJson('/api/v1/vb-gratitude/overview')
-    //     ->assertOk()
-    //     ->assertJsonPath('status', 'success');
+    // The plugin's real /api/v1/vb-gratitude endpoints (the regression the
+    // vb-native spike caught: uploaded server-code plugins that never boot →
+    // routes 404) are proven live end to end by HttpEndpointsTest.
 });
