@@ -4,9 +4,22 @@ declare(strict_types=1);
 
 namespace Vctrs\Plugins\VbGratitude\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Plugins\PluginModel;
 
-class GratitudeShoutout extends Model
+/**
+ * @property string $id
+ * @property string $tenant_type
+ * @property string $tenant_id
+ * @property string $giver_user_id
+ * @property string $recipient_staff_id
+ * @property string $message
+ * @property string|null $category
+ * @property int|null $points_awarded
+ * @property string|null $posted_channel_id
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ */
+class GratitudeShoutout extends PluginModel
 {
     protected $table = 'vb_gratitude_shoutouts';
 
@@ -18,6 +31,11 @@ class GratitudeShoutout extends Model
         'category',
         'points_awarded',
         'posted_channel_id',
+    ];
+
+    /** @var array<string, string> */
+    protected $casts = [
+        'points_awarded' => 'integer',
     ];
 
     /**

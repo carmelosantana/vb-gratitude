@@ -20,7 +20,7 @@ return new class extends Migration
                 $table->uuid('tenant_id')->index();
                 $table->uuid('user_id')->index();
                 $table->string('badge_key')->index();
-                $table->string('earned_at');
+                $table->timestamp('earned_at');
                 $table->timestamps();
             });
         }

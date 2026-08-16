@@ -4,9 +4,19 @@ declare(strict_types=1);
 
 namespace Vctrs\Plugins\VbGratitude\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Plugins\PluginModel;
 
-class GratitudeBadgeAward extends Model
+/**
+ * @property string $id
+ * @property string $tenant_type
+ * @property string $tenant_id
+ * @property string $user_id
+ * @property string $badge_key
+ * @property \Illuminate\Support\Carbon $earned_at
+ * @property \Illuminate\Support\Carbon $created_at
+ * @property \Illuminate\Support\Carbon $updated_at
+ */
+class GratitudeBadgeAward extends PluginModel
 {
     protected $table = 'vb_gratitude_badge_awards';
 
@@ -15,6 +25,11 @@ class GratitudeBadgeAward extends Model
         'user_id',
         'badge_key',
         'earned_at',
+    ];
+
+    /** @var array<string, string> */
+    protected $casts = [
+        'earned_at' => 'datetime',
     ];
 
     /**
