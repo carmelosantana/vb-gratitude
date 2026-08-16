@@ -144,12 +144,43 @@ it('enriches recipient_name to null when the staff record cannot be resolved', f
         ->and($rows[0]['recipient_name'])->toBeNull();
 });
 
-it('resolves receivedThisMonth to a metric of 0 without erroring (best-effort fallback)', function () {
-    // The host offers no PII-free user→staff-id seam, so this widget is a
-    // documented best-effort that returns 0. Assert it resolves cleanly (200 +
-    // metric 0) even with received shoutouts present, proving the fallback path.
+it('counts the acting user\'s this-month RECEIVED shoutouts via the staffIdForUser seam', function () {
     $user = widgetsBootAndGrant();
-    $recipientId = widgetsSeedRecipient();
+
+    // The acting user IS a staff member — seed their staff↔user mapping so
+    // StaffDirectory::staffIdForUser resolves their recipient id (PII-free seam).
+    $myStaffId = widgetsSeedRecipient([
+        'user_id' => $user->id,
+        'display_name' => 'Acting Owner',
+        'personal_email' => 'owner-staff@home.example',
+    ]);
+    // A second, unrelated staff member — shoutouts to them must NOT count.
+    $otherStaffId = widgetsSeedRecipient(['personal_email' => 'other@home.example']);
+
+    $someGiver = (string) Str::uuid();
+
+    // Two received by me THIS month — the only rows that count.
+    widgetsSeedShoutout($someGiver, $myStaffId, 'received A', now());
+    widgetsSeedShoutout($someGiver, $myStaffId, 'received B', now());
+
+    // Must NOT count: to me but last month, and to someone else this month.
+    widgetsSeedShoutout($someGiver, $myStaffId, 'to me last month', now()->startOfMonth()->subDay());
+    widgetsSeedShoutout($someGiver, $otherStaffId, 'to other this month', now());
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/widgets/vb-gratitude.receivedThisMonth')
+        ->assertOk()
+        ->assertJsonPath('data.type', 'metric')
+        ->assertJsonPath('data.payload.label', 'Shoutouts you\'ve received this month')
+        ->assertJsonPath('data.payload.value', 2);
+});
+
+it('resolves receivedThisMonth to a metric of 0 without erroring for an unmapped user', function () {
+    // The acting user maps to no staff record, so currentUserStaffId() is null and
+    // the resolver must still return a clean metric of 0 — never an error — even
+    // with received shoutouts (to OTHER staff) present in the tenant.
+    $user = widgetsBootAndGrant();
+    $recipientId = widgetsSeedRecipient(); // some other staff, NOT mapped to the actor
 
     widgetsSeedShoutout((string) Str::uuid(), $recipientId, 'received one', now());
 

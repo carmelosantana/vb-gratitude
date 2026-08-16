@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * GratitudeService badge evaluation — giving-milestone badges awarded from the
+ * GratitudeService badge evaluation — milestone badges awarded from the
  * BADGE-EVALUATION HOOK in createShoutout.
  *
  * These exercise the REAL host seams (no mocks): shoutouts persist through the
@@ -11,8 +11,9 @@ declare(strict_types=1);
  * rows, tenant isolation rides BelongsToTenant, and the final case drives a real
  * HTTP request through GET /badges (Task 4's endpoint).
  *
- * Giving-based badges ONLY. The received-based `appreciated` badge is out of
- * scope — it needs a user→staff seam StaffDirectory does not yet expose.
+ * Covers both giving-based badges (total / distinct recipients) AND the
+ * received-based `appreciated` badge, which resolves the giver's own staff id
+ * through the sanctioned PII-free StaffDirectory::staffIdForUser seam.
  *
  * Seed + boot helpers (seedGratitudeRecipient, seedGratitudeStaff, bootGratitudeAs)
  * are reused from GratitudeServiceTest / HttpEndpointsTest.
@@ -22,6 +23,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Vctrs\Plugins\VbGratitude\GratitudeService;
 use Vctrs\Plugins\VbGratitude\Models\GratitudeBadgeAward;
+use Vctrs\Plugins\VbGratitude\Models\GratitudeShoutout;
 
 require_once __DIR__.'/../bootstrap.php';
 
@@ -41,6 +43,21 @@ function giverHasBadge(string $userId, string $badgeKey): bool
         ->where('user_id', $userId)
         ->where('badge_key', $badgeKey)
         ->exists();
+}
+
+/**
+ * Persist one shoutout RECEIVED by $recipientStaffId (from an arbitrary giver),
+ * directly, so the giver's own received count can be built up exactly.
+ * BelongsToTenant stamps the currently-bound tenant.
+ */
+function seedReceivedShoutout(string $recipientStaffId): void
+{
+    $s = new GratitudeShoutout;
+    $s->giver_user_id = (string) Str::uuid();
+    $s->recipient_staff_id = $recipientStaffId;
+    $s->message = 'received';
+    $s->points_awarded = 0;
+    $s->save();
 }
 
 it('awards first_thanks on the giver\'s very first shoutout', function () {
@@ -157,6 +174,106 @@ it('scopes badge awards to the tenant the shoutouts were given in', function () 
     // Back in tenant A the award is intact.
     pluginBindTenant($giver->id, $tenantA);
     expect(giverHasBadge($giver->id, 'first_thanks'))->toBeTrue();
+});
+
+it('awards appreciated when a giver who has RECEIVED >= 10 next gives a shoutout', function () {
+    $giver = pluginTestUser('rooftop_owner');
+    pluginBindTenant($giver->id);
+
+    // The giver IS a staff member — seed their staff↔user mapping so
+    // StaffDirectory::staffIdForUser resolves their received recipient id.
+    $giverStaffId = seedGratitudeRecipient([
+        'user_id' => $giver->id,
+        'personal_email' => 'giver-staff@home.example',
+    ]);
+    // Someone else for the giver to shout AT (their giving, not their receiving).
+    $recipientId = seedGratitudeRecipient(['personal_email' => 'recipient@home.example']);
+
+    // 10 shoutouts received by the giver — crosses the appreciated threshold.
+    for ($i = 1; $i <= 10; $i++) {
+        seedReceivedShoutout($giverStaffId);
+    }
+    // Not yet awarded — evaluation only runs when the giver GIVES.
+    expect(giverHasBadge($giver->id, 'appreciated'))->toBeFalse();
+
+    // The giver's next shoutout fires the hook, which evaluates their received count.
+    app(GratitudeService::class)->createShoutout(
+        'rooftop', PLUGIN_TEST_TENANT, $giver->id, $recipientId, 'thanks back!',
+    );
+
+    expect(giverHasBadge($giver->id, 'appreciated'))->toBeTrue();
+});
+
+it('does NOT award appreciated when the giver has RECEIVED fewer than 10', function () {
+    $giver = pluginTestUser('rooftop_owner');
+    pluginBindTenant($giver->id);
+
+    $giverStaffId = seedGratitudeRecipient([
+        'user_id' => $giver->id,
+        'personal_email' => 'giver-staff@home.example',
+    ]);
+    $recipientId = seedGratitudeRecipient(['personal_email' => 'recipient@home.example']);
+
+    // Only 9 received — one short of the threshold.
+    for ($i = 1; $i <= 9; $i++) {
+        seedReceivedShoutout($giverStaffId);
+    }
+
+    app(GratitudeService::class)->createShoutout(
+        'rooftop', PLUGIN_TEST_TENANT, $giver->id, $recipientId, 'thanks back!',
+    );
+
+    expect(giverHasBadge($giver->id, 'appreciated'))->toBeFalse()
+        // ...but the giving path DID run: first_thanks proves the hook fired.
+        ->and(giverHasBadge($giver->id, 'first_thanks'))->toBeTrue();
+});
+
+it('never awards appreciated twice when the giver keeps giving after crossing 10 received', function () {
+    $giver = pluginTestUser('rooftop_owner');
+    pluginBindTenant($giver->id);
+
+    $giverStaffId = seedGratitudeRecipient([
+        'user_id' => $giver->id,
+        'personal_email' => 'giver-staff@home.example',
+    ]);
+    $recipientId = seedGratitudeRecipient(['personal_email' => 'recipient@home.example']);
+
+    for ($i = 1; $i <= 10; $i++) {
+        seedReceivedShoutout($giverStaffId);
+    }
+    $service = app(GratitudeService::class);
+
+    // Three gives, each re-satisfying the appreciated threshold — still one row.
+    $service->createShoutout('rooftop', PLUGIN_TEST_TENANT, $giver->id, $recipientId, 'one');
+    $service->createShoutout('rooftop', PLUGIN_TEST_TENANT, $giver->id, $recipientId, 'two');
+    $service->createShoutout('rooftop', PLUGIN_TEST_TENANT, $giver->id, $recipientId, 'three');
+
+    $appreciated = GratitudeBadgeAward::query()
+        ->where('user_id', $giver->id)
+        ->where('badge_key', 'appreciated')
+        ->get();
+
+    expect($appreciated)->toHaveCount(1);
+});
+
+it('does NOT award appreciated to a giver with no staff mapping (seam resolves null)', function () {
+    $giver = pluginTestUser('rooftop_owner');
+    pluginBindTenant($giver->id);
+
+    // No staff record mapped to the giver → staffIdForUser is null → skip.
+    $recipientId = seedGratitudeRecipient(['personal_email' => 'recipient@home.example']);
+
+    // Even with 12 shoutouts to OTHER staff present, the giver maps to none.
+    $otherStaffId = seedGratitudeRecipient(['personal_email' => 'other@home.example']);
+    for ($i = 1; $i <= 12; $i++) {
+        seedReceivedShoutout($otherStaffId);
+    }
+
+    app(GratitudeService::class)->createShoutout(
+        'rooftop', PLUGIN_TEST_TENANT, $giver->id, $recipientId, 'thanks!',
+    );
+
+    expect(giverHasBadge($giver->id, 'appreciated'))->toBeFalse();
 });
 
 it('surfaces an earned badge through GET /badges', function () {

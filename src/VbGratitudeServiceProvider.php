@@ -76,16 +76,14 @@ class VbGratitudeServiceProvider implements PluginModule, ProvidesScheduledTasks
             ],
             // How many shoutouts the CURRENT actor has RECEIVED this month. Shoutouts
             // are addressed to a STAFF id (recipient_staff_id), so counting received
-            // requires mapping the current USER to their staff-employee id.
+            // requires mapping the current USER to their staff-employee id — done
+            // through the sanctioned PII-free StaffDirectory::staffIdForUser seam via
+            // the currentUserStaffId() choke-point below (never a StaffHub model).
             //
-            // GAP (reported NEEDS_CONTEXT): the host's sanctioned cross-plugin seam
-            // StaffDirectory exposes no user→staff-id resolver — SAFE_FIELDS omits
-            // user_id and no method returns the employee id for a user. The only
-            // mapping lives inside StaffHubEmployee.user_id, reachable ONLY by
-            // importing a StaffHub model (a forbidden PII/tenant-seam bypass). Rather
-            // than hardcode a fragile join, this resolver is a best-effort that
-            // returns 0 until a PII-free directory seam exists (e.g.
-            // StaffDirectory::staffIdForUser()). It never errors.
+            // When that mapping yields null (an unmapped user, or a host that predates
+            // the seam) the resolver still returns a clean metric of 0 — it never
+            // errors. BelongsToTenant scopes the count to the active tenant, and the
+            // explicit month whereBetween mirrors givenThisMonth.
             'vb-gratitude.receivedThisMonth' => [
                 'vb-gratitude.shoutouts.read.rooftop',
                 function (): array {
@@ -148,15 +146,30 @@ class VbGratitudeServiceProvider implements PluginModule, ProvidesScheduledTasks
     }
 
     /**
-     * Best-effort map of the current actor to their staff-employee id.
+     * Map the current actor to their active staff-employee id in-tenant.
      *
-     * Returns null whenever the host offers no PII-free user→staff-id seam (the
-     * present state — see receivedThisMonth). Kept as a single choke-point so that
-     * when StaffDirectory grows such a seam, only this method changes.
+     * Resolved ONLY through the sanctioned PII-free StaffDirectory::staffIdForUser
+     * seam — never a StaffHub model, never a hand-join. Returns null when the user
+     * has no active staff record in this tenant (unmapped user).
+     *
+     * DEFENSIVE GUARD: the seam is a recent host addition, so on an older host
+     * that predates it we degrade to null (best-effort 0) rather than fataling on
+     * a BadMethodCall. Kept as the single choke-point so both received-based read
+     * paths share one mapping.
      */
     private function currentUserStaffId(): ?string
     {
-        return null;
+        if (! method_exists(StaffDirectory::class, 'staffIdForUser')) {
+            return null; // host predates the staffIdForUser seam
+        }
+
+        $ctx = app(TenantContext::class);
+
+        return app(StaffDirectory::class)->staffIdForUser(
+            $ctx->activeTenantType(),
+            $ctx->activeTenantId(),
+            $ctx->userId(),
+        );
     }
 
     public function permissions(): array

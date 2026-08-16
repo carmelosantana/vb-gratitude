@@ -37,28 +37,35 @@ class GratitudeService
     private const DEFAULT_DAILY_ALLOWANCE = 3;
 
     /**
-     * Single source of truth for the GIVING-based milestone badges.
+     * Single source of truth for the milestone badges.
      *
-     * Every badge here is computable purely from THIS tenant's own
-     * vb_gratitude_shoutouts rows by the giver — no cross-plugin seam, no PII.
      * `kind` decides which of the giver's counts the threshold is measured
      * against:
      *   - 'total'                → total shoutouts the giver has recorded;
-     *   - 'distinct_recipients'  → distinct recipient_staff_id the giver has tagged.
+     *   - 'distinct_recipients'  → distinct recipient_staff_id the giver has tagged;
+     *   - 'received'             → shoutouts the giver has RECEIVED (total, this
+     *                              tenant), resolved through the sanctioned PII-free
+     *                              StaffDirectory::staffIdForUser seam. Skipped when
+     *                              that seam is unavailable or the giver is unmapped.
+     *
+     * The 'total'/'distinct_recipients' badges are computable purely from THIS
+     * tenant's own vb_gratitude_shoutouts rows — no cross-plugin seam, no PII. The
+     * 'received' badge (`appreciated`) additionally needs the giver's own staff id,
+     * which comes ONLY from StaffDirectory (never a StaffHub model).
      *
      * Add a row here to add a badge; nothing else in the evaluator changes.
      *
-     * NOTE: the received-based `appreciated` badge is intentionally absent. It
-     * needs a user→staff mapping the sanctioned StaffDirectory seam does not
-     * expose; it awaits a core StaffDirectory::staffIdForUser() seam.
-     *
-     * @var array<string, array{kind: 'total'|'distinct_recipients', threshold: int}>
+     * @var array<string, array{kind: 'total'|'distinct_recipients'|'received', threshold: int}>
      */
-    private const GIVING_BADGES = [
+    private const BADGES = [
         'first_thanks' => ['kind' => 'total', 'threshold' => 1],
         'grateful_regular' => ['kind' => 'total', 'threshold' => 10],
         'team_connector' => ['kind' => 'distinct_recipients', 'threshold' => 5],
         'gratitude_champion' => ['kind' => 'total', 'threshold' => 50],
+        // TIMING: because badges are evaluated only on the GIVER's shoutout-create,
+        // a user earns `appreciated` the next time they GIVE a shoutout after
+        // crossing 10 received — acceptable, since evaluation runs on create.
+        'appreciated' => ['kind' => 'received', 'threshold' => 10],
     ];
 
     public function __construct(
@@ -141,45 +148,89 @@ class GratitudeService
         }
 
         // BADGE-EVALUATION HOOK: the shoutout + any point award have landed, so
-        // evaluate the giver's giving-milestone badges and award any newly earned
-        // one. Kept off the persisted-shoutout return path — a badge insert never
-        // blocks or alters the shoutout the caller just made.
-        $this->evaluateGivingBadges($giverUserId);
+        // evaluate the giver's milestone badges and award any newly earned one.
+        // Kept off the persisted-shoutout return path — a badge insert never blocks
+        // or alters the shoutout the caller just made.
+        $this->evaluateBadges($tenantType, $tenantId, $giverUserId);
 
         return $shoutout;
     }
 
     /**
-     * Evaluate the giver's GIVING-milestone badges and award any newly earned.
+     * Evaluate the giver's milestone badges and award any newly earned.
      *
-     * Computed entirely from this tenant's own shoutouts (BelongsToTenant scopes
-     * every query), so it needs no cross-plugin seam and touches no PII. At most
-     * one COUNT per `kind` runs (memoized), regardless of how many badges share a
-     * kind, so the core shoutout path stays cheap.
+     * The giving-based counts ('total'/'distinct_recipients') are computed entirely
+     * from this tenant's own shoutouts (BelongsToTenant scopes every query), so they
+     * need no cross-plugin seam and touch no PII. The received-based `appreciated`
+     * badge additionally resolves the giver's OWN staff id through the sanctioned
+     * StaffDirectory::staffIdForUser seam and counts shoutouts addressed to it.
      *
-     * Received-based badges (e.g. `appreciated`) are deliberately NOT evaluated
-     * here — they await a core StaffDirectory::staffIdForUser() seam.
+     * At most one COUNT per `kind` runs (memoized), regardless of how many badges
+     * share a kind, so the core shoutout path stays cheap. When the received count
+     * is unavailable (host predates the seam, or the giver has no staff mapping)
+     * received-based badges are simply skipped — never a crash.
      */
-    private function evaluateGivingBadges(string $giverUserId): void
+    private function evaluateBadges(string $tenantType, string $tenantId, string $giverUserId): void
     {
         $totalGiven = null;
         $distinctRecipients = null;
 
-        foreach (self::GIVING_BADGES as $badgeKey => $def) {
-            $count = match ($def['kind']) {
-                'total' => $totalGiven ??= GratitudeShoutout::query()
-                    ->where('giver_user_id', $giverUserId)
-                    ->count(),
-                'distinct_recipients' => $distinctRecipients ??= GratitudeShoutout::query()
-                    ->where('giver_user_id', $giverUserId)
-                    ->distinct()
-                    ->count('recipient_staff_id'),
-            };
+        // Resolved lazily on first 'received' badge; null = unavailable → skip.
+        $receivedResolved = false;
+        $receivedCount = null;
+
+        foreach (self::BADGES as $badgeKey => $def) {
+            if ($def['kind'] === 'received') {
+                if (! $receivedResolved) {
+                    $receivedCount = $this->receivedCountForGiver($tenantType, $tenantId, $giverUserId);
+                    $receivedResolved = true;
+                }
+                if ($receivedCount === null) {
+                    continue; // seam unavailable or unmapped giver → skip
+                }
+                $count = $receivedCount;
+            } else {
+                $count = match ($def['kind']) {
+                    'total' => $totalGiven ??= GratitudeShoutout::query()
+                        ->where('giver_user_id', $giverUserId)
+                        ->count(),
+                    'distinct_recipients' => $distinctRecipients ??= GratitudeShoutout::query()
+                        ->where('giver_user_id', $giverUserId)
+                        ->distinct()
+                        ->count('recipient_staff_id'),
+                };
+            }
 
             if ($count >= $def['threshold']) {
                 $this->awardBadge($giverUserId, $badgeKey);
             }
         }
+    }
+
+    /**
+     * The giver's OWN received-shoutout count (total, this tenant), or null when it
+     * can't be determined without PII: the host predates StaffDirectory::staffIdForUser,
+     * or the giver has no active staff record in this tenant.
+     *
+     * Staff resolution is ONLY through StaffDirectory — never a StaffHub model,
+     * never a hand-join. BelongsToTenant scopes the shoutout count to this tenant.
+     */
+    private function receivedCountForGiver(string $tenantType, string $tenantId, string $giverUserId): ?int
+    {
+        // DEFENSIVE GUARD for hosts that predate the seam: degrade to null rather
+        // than fataling on a BadMethodCall.
+        if (! method_exists($this->staff, 'staffIdForUser')) {
+            return null;
+        }
+
+        $staffId = $this->staff->staffIdForUser($tenantType, $tenantId, $giverUserId);
+        if ($staffId === null) {
+            return null; // unmapped giver
+        }
+
+        return GratitudeShoutout::query()
+            ->where('recipient_staff_id', $staffId)
+            ->count();
     }
 
     /**
