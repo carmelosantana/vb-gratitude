@@ -17,7 +17,6 @@ declare(strict_types=1);
  * (src/routes.php) are exercised end to end by HttpEndpointsTest.
  */
 
-use App\Models\Membership;
 use App\Models\Plugin;
 use App\Plugins\PluginLifecycle;
 use App\Plugins\PluginManager;
@@ -51,15 +50,14 @@ it('installs the signed vb-gratitude, boots it, and creates its schema', functio
     expect(Schema::hasTable('vb_gratitude_shoutouts'))->toBeTrue();
     expect(Schema::hasTable('vb_gratitude_badge_awards'))->toBeTrue();
 
-    // This plugin ships enabledByDefault:false and its manifest declares no
-    // permissionGrants, so the signed install leaves it deactivated and the
-    // rooftop_owner role has none of its permissions. Both are prerequisites for
-    // the widget endpoint (tenant-enabled → key in registry; permission → not
-    // 403), so the test explicitly activates the plugin for the tenant and grants
-    // the widget's read permission before asserting the resolver.
+    // This plugin ships enabledByDefault:false, so the signed install leaves it
+    // deactivated and no role holds its permissions yet. Enabling it for the
+    // tenant both registers the widget key AND applies the manifest's
+    // permissionGrants — the rooftop_owner role then holds
+    // vb-gratitude.shoutouts.read.rooftop, so no manual permission override is
+    // needed. Both prerequisites for the widget endpoint (tenant-enabled → key in
+    // registry; permission → not 403) are satisfied by enable() alone.
     app(PluginLifecycle::class)->enable('vb-gratitude');
-    Membership::where('user_id', $user->id)
-        ->update(['permission_overrides_json' => ['+vb-gratitude.shoutouts.read.rooftop']]);
 
     // A widget resolver runs (proves the two-part widget registration is wired
     // up end to end: manifest.json card + VbGratitudeServiceProvider::widgets() resolver).

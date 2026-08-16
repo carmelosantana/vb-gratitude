@@ -107,8 +107,14 @@ it('maps an unknown recipient to a 422 and writes no row (never a 500)', functio
 });
 
 it('rejects a giver without the create permission with a 403', function () {
-    // Read-only grant: enough to reach the route, NOT enough to pass the create gate.
-    $user = bootGratitudeAs(['+vb-gratitude.shoutouts.read.rooftop']);
+    // Read-only: enough to reach the route, NOT enough to pass the create gate.
+    // The plugin's permissionGrants would grant rooftop_owner create on enable,
+    // so we explicitly deny it (a `-` override beats a role/plugin grant) to keep
+    // this a true negative test of the create gate.
+    $user = bootGratitudeAs([
+        '+vb-gratitude.shoutouts.read.rooftop',
+        '-vb-gratitude.shoutouts.create.rooftop',
+    ]);
     $recipient = seedGratitudeStaff();
 
     $this->actingAs($user)
@@ -153,8 +159,13 @@ it('returns the tenant feed newest-first with recipient names enriched', functio
 });
 
 it('blocks the shoutout feed without read permission (403)', function () {
-    // Create grant reaches the route but the index is read-gated.
-    $user = bootGratitudeAs(['+vb-gratitude.shoutouts.create.rooftop']);
+    // Create grant reaches the route but the index is read-gated. Explicitly deny
+    // read (a `-` override beats the enable-time permissionGrant to rooftop_owner)
+    // so this stays a true negative test of the read gate.
+    $user = bootGratitudeAs([
+        '+vb-gratitude.shoutouts.create.rooftop',
+        '-vb-gratitude.shoutouts.read.rooftop',
+    ]);
 
     $this->actingAs($user)
         ->getJson('/api/v1/vb-gratitude/shoutouts')
@@ -194,7 +205,12 @@ it('lists the acting user\'s earned badges newest-first', function () {
 
 it('blocks the badges list without badges-read permission (403)', function () {
     // Shoutout-read grant reaches the route but badges is badges-read-gated.
-    $user = bootGratitudeAs(['+vb-gratitude.shoutouts.read.rooftop']);
+    // Explicitly deny badges-read (a `-` override beats the enable-time
+    // permissionGrant to rooftop_owner) so this stays a true negative test.
+    $user = bootGratitudeAs([
+        '+vb-gratitude.shoutouts.read.rooftop',
+        '-vb-gratitude.badges.read.rooftop',
+    ]);
 
     $this->actingAs($user)
         ->getJson('/api/v1/vb-gratitude/badges')
@@ -219,8 +235,13 @@ it('lists assignable teammates for the picker via StaffDirectory', function () {
 });
 
 it('blocks the teammate picker without create permission (403)', function () {
-    // Read grant reaches nothing here — teammates is create-gated.
-    $user = bootGratitudeAs(['+vb-gratitude.shoutouts.read.rooftop']);
+    // Read grant reaches nothing here — teammates is create-gated. Explicitly deny
+    // create (a `-` override beats the enable-time permissionGrant to
+    // rooftop_owner) so this stays a true negative test of the create gate.
+    $user = bootGratitudeAs([
+        '+vb-gratitude.shoutouts.read.rooftop',
+        '-vb-gratitude.shoutouts.create.rooftop',
+    ]);
 
     $this->actingAs($user)
         ->getJson('/api/v1/vb-gratitude/teammates')

@@ -37,6 +37,48 @@
       "scope": "rooftop"
     }
   ],
+  "permissionGrants": {
+    "vb-gratitude.shoutouts.create.rooftop": [
+      "agency_owner",
+      "agency_admin",
+      "group_owner",
+      "group_admin",
+      "rooftop_owner",
+      "rooftop_admin",
+      "department_manager",
+      "employee"
+    ],
+    "vb-gratitude.shoutouts.read.rooftop": [
+      "agency_owner",
+      "agency_admin",
+      "group_owner",
+      "group_admin",
+      "rooftop_owner",
+      "rooftop_admin",
+      "department_manager",
+      "employee",
+      "read_only_auditor"
+    ],
+    "vb-gratitude.badges.read.rooftop": [
+      "agency_owner",
+      "agency_admin",
+      "group_owner",
+      "group_admin",
+      "rooftop_owner",
+      "rooftop_admin",
+      "department_manager",
+      "employee",
+      "read_only_auditor"
+    ],
+    "vb-gratitude.admin.manage.rooftop": [
+      "agency_owner",
+      "agency_admin",
+      "group_owner",
+      "group_admin",
+      "rooftop_owner",
+      "rooftop_admin"
+    ]
+  },
   "models": [
     {
       "name": "GratitudeShoutout",
