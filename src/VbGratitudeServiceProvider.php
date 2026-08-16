@@ -54,7 +54,7 @@ class VbGratitudeServiceProvider implements PluginModule, ProvidesScheduledTasks
             fn (): array => [
                 'type' => 'metric',
                 'payload' => [
-                    'label' => 'Shoutouts you've given this month',
+                    'label' => 'Shoutouts you\'ve given this month',
                         'value' => 0,
                 ],
             ],
@@ -64,7 +64,7 @@ class VbGratitudeServiceProvider implements PluginModule, ProvidesScheduledTasks
             fn (): array => [
                 'type' => 'metric',
                 'payload' => [
-                    'label' => 'Shoutouts you've received this month',
+                    'label' => 'Shoutouts you\'ve received this month',
                         'value' => 0,
                 ],
             ],
