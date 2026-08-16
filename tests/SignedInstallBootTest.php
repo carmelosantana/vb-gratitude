@@ -11,13 +11,15 @@ declare(strict_types=1);
  * mounted read-only at env PLUGIN_SRC; the keypair comes from env PLUGIN_PRIV /
  * PLUGIN_PUB — never hardcoded, never committed.
  *
- * This is a worked example against the full-module reference spec (one model,
- * StaffCertification, table vb_gratitude_certifications; one metric widget,
- * totalCertifications). If your own spec adds a real endpoint to src/routes.php,
- * uncomment and adapt the HTTP assertion below.
+ * This exercises this plugin's real domain: shoutouts (table
+ * vb_gratitude_shoutouts) and badge awards (table vb_gratitude_badge_awards);
+ * the givenThisMonth metric widget. If your own spec adds a real endpoint to
+ * src/routes.php, uncomment and adapt the HTTP assertion below.
  */
 
+use App\Models\Membership;
 use App\Models\Plugin;
+use App\Plugins\PluginLifecycle;
 use App\Plugins\PluginManager;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
@@ -45,13 +47,24 @@ it('installs the signed vb-gratitude, boots it, and creates its schema', functio
     // The plugin's server code actually executed (register() ran).
     expect(app(PluginManager::class)->serverCodeRan('vb-gratitude'))->toBeTrue();
 
-    // Migrations ran: the model's table exists.
-    expect(Schema::hasTable('vb_gratitude_certifications'))->toBeTrue();
+    // Migrations ran: the plugin's tables exist.
+    expect(Schema::hasTable('vb_gratitude_shoutouts'))->toBeTrue();
+    expect(Schema::hasTable('vb_gratitude_badge_awards'))->toBeTrue();
+
+    // This plugin ships enabledByDefault:false and its manifest declares no
+    // permissionGrants, so the signed install leaves it deactivated and the
+    // rooftop_owner role has none of its permissions. Both are prerequisites for
+    // the widget endpoint (tenant-enabled → key in registry; permission → not
+    // 403), so the test explicitly activates the plugin for the tenant and grants
+    // the widget's read permission before asserting the resolver.
+    app(PluginLifecycle::class)->enable('vb-gratitude');
+    Membership::where('user_id', $user->id)
+        ->update(['permission_overrides_json' => ['+vb-gratitude.shoutouts.read.rooftop']]);
 
     // A widget resolver runs (proves the two-part widget registration is wired
     // up end to end: manifest.json card + VbGratitudeServiceProvider::widgets() resolver).
     $this->actingAs($user)
-        ->getJson('/api/v1/widgets/vb-gratitude.totalCertifications')
+        ->getJson('/api/v1/widgets/vb-gratitude.givenThisMonth')
         ->assertOk()
         ->assertJsonPath('data.payload.value', 0);
 
