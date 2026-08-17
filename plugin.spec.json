@@ -5,7 +5,7 @@
   "name": "Gratitude",
   "navLabel": "Gratitude",
   "navIcon": "heartHandshake",
-  "description": "Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger; recognition can optionally post to a team channel.",
+  "description": "Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger.",
   "author": "Carmelo Santana",
   "category": "wellness",
   "visibility": "marketplace",
@@ -107,11 +107,6 @@
           "name": "points_awarded",
           "type": "integer",
           "nullable": true
-        },
-        {
-          "name": "posted_channel_id",
-          "type": "uuid",
-          "nullable": true
         }
       ]
     },
@@ -163,20 +158,6 @@
         "default": 3,
         "min": 1,
         "max": 25
-      },
-      {
-        "key": "channelPostingEnabled",
-        "label": "Also post shoutouts to a team channel",
-        "group": "Sharing",
-        "type": "boolean",
-        "default": false
-      },
-      {
-        "key": "channelId",
-        "label": "Channel to post shoutouts to",
-        "group": "Sharing",
-        "type": "string",
-        "default": null
       }
     ],
     "userPreferences": [

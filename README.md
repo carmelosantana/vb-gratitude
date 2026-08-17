@@ -1,6 +1,6 @@
 # `vb-gratitude` — Gratitude
 
-Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger; recognition can optionally post to a team channel.
+Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger.
 
 ## Architecture
 

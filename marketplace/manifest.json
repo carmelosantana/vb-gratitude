@@ -2,7 +2,7 @@
   "slug": "vb-gratitude",
   "name": "Gratitude",
   "version": "0.1.0",
-  "description": "Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger; recognition can optionally post to a team channel.",
+  "description": "Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger.",
   "author": "Carmelo Santana",
   "category": "wellness",
   "visibility": "marketplace",

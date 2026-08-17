@@ -8,7 +8,9 @@ declare(strict_types=1);
  * earned_at → Carbon) round-trip through the database.
  */
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Vctrs\Plugins\VbGratitude\Models\GratitudeBadgeAward;
 use Vctrs\Plugins\VbGratitude\Models\GratitudeShoutout;
@@ -42,6 +44,48 @@ it('creates and retrieves a shoutout with a uuid key and int cast', function () 
         ->and($fresh->message)->toBe('Great work on the audit.')
         ->and($fresh->points_awarded)->toBe(15) // cast to int
         ->and($fresh->tenant_id)->toBe(PLUGIN_TEST_TENANT);
+});
+
+it('carries no posted_channel_id column or fillable — the channel feature was never wired', function () {
+    // Regression guard for the dead channel-posting surface: the column existed
+    // with no code path writing it and no sanctioned seam to write it with, so
+    // both the schema and the model contract must stay clean. Migration
+    // 2026_08_16_000004 drops it on hosts that already ran the original create.
+    expect(Schema::hasColumn('vb_gratitude_shoutouts', 'posted_channel_id'))->toBeFalse()
+        ->and(Schema::hasColumn('vb_gratitude_shoutouts', 'points_awarded'))->toBeTrue()
+        ->and((new GratitudeShoutout)->getFillable())->not->toContain('posted_channel_id');
+
+    // Serialization is this plugin's API contract, so prove the field is not in
+    // the response body either.
+    $shoutout = GratitudeShoutout::create([
+        'giver_user_id' => (string) Str::uuid(),
+        'recipient_staff_id' => (string) Str::uuid(),
+        'message' => 'Thanks for covering the late delivery.',
+    ]);
+
+    expect($shoutout->fresh()->toArray())->not->toHaveKey('posted_channel_id');
+});
+
+it('drops posted_channel_id on a host that already ran the original create migration', function () {
+    // The fresh-install path never has the column (the create migration no
+    // longer emits it), so the drop migration's only reason to exist — a host
+    // whose table predates this change — has to be exercised deliberately.
+    Schema::table('vb_gratitude_shoutouts', function (Blueprint $table) {
+        $table->uuid('posted_channel_id')->nullable();
+    });
+
+    expect(Schema::hasColumn('vb_gratitude_shoutouts', 'posted_channel_id'))->toBeTrue();
+
+    $migration = require pluginSrc().'/database/migrations/2026_08_16_000004_drop_posted_channel_id_from_vb_gratitude_shoutouts.php';
+    $migration->up();
+
+    expect(Schema::hasColumn('vb_gratitude_shoutouts', 'posted_channel_id'))->toBeFalse();
+
+    // Idempotent: plugin migrations may be re-run across installs, so a second
+    // pass over an already-clean table must be a no-op, not an error.
+    $migration->up();
+
+    expect(Schema::hasColumn('vb_gratitude_shoutouts', 'posted_channel_id'))->toBeFalse();
 });
 
 it('creates and retrieves a badge award with a datetime cast', function () {

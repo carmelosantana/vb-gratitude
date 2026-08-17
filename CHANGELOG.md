@@ -26,3 +26,13 @@ All notable changes to `vb-gratitude` are documented here. The format follows
 - Module UI mounted under the dashboard for giving and browsing gratitude.
 - Default permission grants so the plugin is usable the moment an admin enables
   it (everyone can give and view; owners and admins manage settings).
+
+### Removed
+
+- Dropped the never-implemented channel-posting surface before first publish:
+  the `channelPostingEnabled` and `channelId` admin settings, the
+  `posted_channel_id` column, and the description's claim that recognition can
+  post to a team channel. No code path ever wrote the column, and there is no
+  sanctioned cross-plugin seam to write it with — the channels plugin binds
+  only `ChannelDirectory` (vendor rooms) and `ChannelSystemMessenger` is
+  neither container-bound nor listed in the host's `capabilities.md`.

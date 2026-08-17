@@ -23,7 +23,6 @@ return new class extends Migration
                 $table->text('message');
                 $table->string('category')->nullable();
                 $table->integer('points_awarded')->nullable();
-                $table->uuid('posted_channel_id')->nullable();
                 $table->timestamps();
             });
         }

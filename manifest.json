@@ -3,7 +3,7 @@
   "slug": "vb-gratitude",
   "name": "Gratitude",
   "version": "0.1.0",
-  "description": "Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger; recognition can optionally post to a team channel.",
+  "description": "Gamified team gratitude for small teams: give a shoutout to a teammate, earn points and badges, with a gentle daily morning prompt. Points award through the core gamification ledger.",
   "author": "Carmelo Santana",
   "visibility": "marketplace",
   "status": "draft",
@@ -129,20 +129,6 @@
         "default": 3,
         "min": 1,
         "max": 25
-      },
-      {
-        "key": "channelPostingEnabled",
-        "label": "Also post shoutouts to a team channel",
-        "group": "Sharing",
-        "type": "boolean",
-        "default": false
-      },
-      {
-        "key": "channelId",
-        "label": "Channel to post shoutouts to",
-        "group": "Sharing",
-        "type": "string",
-        "default": null
       }
     ],
     "userPreferences": [
