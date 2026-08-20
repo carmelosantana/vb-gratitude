@@ -32,6 +32,7 @@ set -euo pipefail
 
 PLUGIN="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="${MAIN:-$(cd "$PLUGIN/../../vctrbase-php" && pwd)}"
+CORE_PIN="${CORE_PIN:-a93cac8}"
 WT="${WT:-$PLUGIN/../../vctrbase-php-vb-gratitude-test}"
 KEYDIR="${KEYDIR:-$(cd "$PLUGIN/../../.plugin-signing-keys" && pwd)}"
 DB="${DB:-vctrs_test_vb_gratitude}"
@@ -44,10 +45,15 @@ EXTRA_ARGS="$*"
 PRIV="$(cat "$KEYDIR/vctrs.privkey.b64")"
 PUB="$(cat "$KEYDIR/vctrs.pubkey.b64")"
 
-# ── Create the throwaway worktree if missing (checked out at the app's HEAD) ─────
+# ── Ensure the throwaway app worktree exists AND is pinned to the stated core SHA ─
+# Pinned, never HEAD: core master moves under concurrent workstreams, which would
+# silently retarget the core version under test and make gate results irreproducible.
 if [ ! -d "$WT" ]; then
-  echo ">> creating throwaway worktree $WT"
-  git -C "$MAIN" worktree add -f --detach "$WT" HEAD >/dev/null 2>&1
+  echo ">> creating throwaway worktree $WT at core $CORE_PIN"
+  git -C "$MAIN" worktree add -f --detach "$WT" "$CORE_PIN" >/dev/null 2>&1
+elif [ "$(git -C "$WT" rev-parse HEAD 2>/dev/null)" != "$(git -C "$MAIN" rev-parse "$CORE_PIN")" ]; then
+  echo ">> repinning worktree $WT to core $CORE_PIN"
+  git -C "$WT" checkout -f --detach "$CORE_PIN" >/dev/null 2>&1
 fi
 WT="$(cd "$WT" && pwd)"
 
@@ -78,7 +84,7 @@ docker compose exec -T postgres sh -c \
    echo '   '$DB' ready'"
 
 echo ">> running pest ($TARGET) in worktree ($WT)…"
-docker compose run --rm -T \
+docker compose run --rm -T --no-deps \
   -v "$WT:/var/www/html" \
   -v "$MAIN/vendor:/var/www/html/vendor" \
   -v "$PLUGIN:/plugin-src:ro" \
